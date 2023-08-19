@@ -93,10 +93,9 @@ with wave.open('output.wav', 'wb') as wf:
     stream.close()
     audio.terminate()
 
-
 result = whisper_model.transcribe("output.wav", language="it")
 print(result["text"])
 # plot the confidences for the speech
 plt.figure(figsize=(20, 6))
 plt.plot(voiced_confidences)
-#plt.show()
+# plt.show()  # activate to show the plot of the frames and relative confidence vad
