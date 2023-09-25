@@ -3,6 +3,15 @@ import numpy as np
 import pyaudio
 import torch
 import torchaudio
+from enum import Enum
+
+
+class State(Enum):
+    NOT_STARTED = 0
+    STARTED = 1
+    POTENTIAL_TURN_CHANGE = 2
+    CONVERSATION_NOT_STARTED = 3
+
 
 # PyAudio parameters
 FORMAT = pyaudio.paInt16
@@ -12,9 +21,11 @@ FRAME_DURATION = 0.05  # s
 CHUNK = int(RATE * FRAME_DURATION)
 
 # Detection parameters
-SILENCE_THRESHOLD = 0.7  # s
+SILENCE_THRESHOLD = 0.5  # s
+CONFIRMED_SILENCE_THRESHOLD = 2  # s
 CONFIDENCE_THRESHOLD = 0.5  #
-START_CONVERSATION_THRESHOLD = 5  # s
+START_CONVERSATION_THRESHOLD = 10  # s
+CONVERSATION_NOT_STARTED_THRESHOLD = 5  # s
 
 
 def int2float(sound):
@@ -26,34 +37,62 @@ def int2float(sound):
     return sound
 
 
-def detect_turn_change(stream, vad_model):
+def detect_turn_change(stream, vad_model, queue):
     print("Started Recording")
+    print(" ")
+    state = State.NOT_STARTED
     cumulative_silence = 0  # s
-    conversation_started = False
     while True:
-        audio_chunk = stream.read(CHUNK)
-
-        audio_int16 = np.frombuffer(audio_chunk, np.int16)
-
-        audio_float32 = int2float(audio_int16)
+        # gets the audio_chunk
+        audio_chunk = int2float(np.frombuffer(stream.read(CHUNK), np.int16))
 
         # get the confidences
-        new_confidence = vad_model(torch.from_numpy(audio_float32), 16000).item()
+        new_confidence = vad_model(torch.from_numpy(audio_chunk), 16000).item()
 
         # check if the new frame has voice
         if new_confidence <= CONFIDENCE_THRESHOLD:
             cumulative_silence += FRAME_DURATION
-            if cumulative_silence >= SILENCE_THRESHOLD and conversation_started:
-                print("Turn change")
+            if state == State.STARTED and cumulative_silence >= SILENCE_THRESHOLD:
+                state = State.POTENTIAL_TURN_CHANGE
+                print("Potential turn change")
+                queue.put("Potential turn change")
+
+            elif state == State.POTENTIAL_TURN_CHANGE and cumulative_silence >= CONFIRMED_SILENCE_THRESHOLD:
+                state = State.NOT_STARTED  # we need to go back to the NOT_STARTED state to initiate a new turn
+                print("Turn change confirmed")
                 print(" ")
-                return "Turn change"
-            if cumulative_silence >= START_CONVERSATION_THRESHOLD and not conversation_started:
+                queue.put("Turn change confirmed")
+
+            # if for more than CONVERSATION_NOT_STARTED_THRESHOLD there is silence
+            # the user may have not understood the response and we should repeat it
+            elif state == State.NOT_STARTED and cumulative_silence >= CONVERSATION_NOT_STARTED_THRESHOLD:
+                state = State.CONVERSATION_NOT_STARTED
                 print("Conversation not started")
                 print(" ")
-                return "Conversation not started"
+                queue.put("Conversation not started")
+
+            # if the user stay silent for more than START_CONVERSATION_THRESHOLD
+            # the robot may want to start the conversation
+            elif state == State.CONVERSATION_NOT_STARTED and cumulative_silence >= START_CONVERSATION_THRESHOLD:
+                cumulative_silence = 0
+                state = state.NOT_STARTED
+                print("Start conversation")
+                print(" ")
+                queue.put("Start conversation")
+
         else:
-            conversation_started = True
             cumulative_silence = 0
+            if state == State.NOT_STARTED or state == State.CONVERSATION_NOT_STARTED:
+                state = State.STARTED
+                print("Conversation started")
+                queue.put("Conversation started")
+
+            elif state == State.POTENTIAL_TURN_CHANGE:
+                # if it was detected a potential turn change we need to send a message to
+                # interrupt the pipeline
+                state = State.STARTED
+                print("Potential turn change aborted")
+                queue.put("Potential turn change aborted")
 
 
 # plot the confidences for the speech
@@ -77,9 +116,7 @@ def analyze(queue):
                         input=True,
                         frames_per_buffer=CHUNK)
 
-    while True:
-        detection = detect_turn_change(stream, vad_model)
-        queue.put(detection)
+    detect_turn_change(stream, vad_model, queue)
 
     stream.close()
     audio.terminate()
