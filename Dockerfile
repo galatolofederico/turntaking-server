@@ -32,7 +32,7 @@ RUN adduser \
 # Leverage a bind mount to requirements.txt to avoid having to copy them into
 # into this layer.
 RUN apt-get update \
-        && apt-get install libportaudio2 libportaudiocpp0 portaudio19-dev libsndfile1-dev gcc libc-dev -y \
+        && apt-get install libportaudio2 libportaudiocpp0 portaudio19-dev libsndfile1-dev gcc libc-dev alsa-utils -y \
         && pip install pyaudio
 
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -46,7 +46,7 @@ USER appuser
 COPY . .
 
 # Expose the port that the application listens on.
-EXPOSE 8000
+EXPOSE 8765
 
 # Run the application.
 CMD python main.py
