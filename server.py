@@ -8,7 +8,7 @@ import uuid
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaRelay
-from Analyzer import analyze
+from analyzer import Analyzer
 
 ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
@@ -20,13 +20,14 @@ class AudioTrackProcessing(MediaStreamTrack):
     Audio stream track that processess AudioFrames from tracks.
     """
 
-    def __init__(self, track):
+    def __init__(self, track:MediaStreamTrack, analyzer:Analyzer):
         super().__init__()
         self.track = track
+        self.analyzer = analyzer
 
     async def recv(self):
         frame = await self.track.recv()
-        analyze(frame)
+        self.analyzer.analyze(frame)
         return frame
 
 async def index(request):
@@ -54,6 +55,7 @@ async def offer(request):
 
     # prepare local media
     recorder = MediaBlackhole()
+    analyzer = Analyzer()
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
@@ -69,7 +71,7 @@ async def offer(request):
         if track.kind == "audio":
             print("Started Listening")
             relayed_audio = relay_audio.subscribe(track)
-            recorder.addTrack(AudioTrackProcessing(relayed_audio))
+            recorder.addTrack(AudioTrackProcessing(relayed_audio, analyzer))
         
         @track.on("ended")
         async def on_ended():
