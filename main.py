@@ -1,15 +1,17 @@
 import multiprocessing
-from AudioAnalyzer import analyze
+from AnalyzerMultiprocessQueue import analyze
 from InformationSender import send_information
+from serverMultiprocessQueue import main
 
 if __name__ == "__main__":
-    uri = "ws://localhost:8765/"
     queue = multiprocessing.Queue()
-    informationSender = multiprocessing.Process(target=send_information, args=(uri, queue, ))
-    analyzer = multiprocessing.Process(target=analyze, args=(queue, ))
+    audio_queue = multiprocessing.Queue()
+    latency_queue = multiprocessing.Queue()
+    server = multiprocessing.Process(target=main, args=(audio_queue, latency_queue, ))
+    analyzer = multiprocessing.Process(target=analyze, args=(audio_queue, latency_queue, ))
 
-    informationSender.start()
+    server.start()
     analyzer.start()
 
-    informationSender.join()
+    server.join()
     analyzer.join()
