@@ -54,7 +54,7 @@ def int2float(sound):
     return sound
 
 
-def analyze(frame, start, latencies):
+def analyze(frame):
     frame = resampler.resample(frame)[0]
     audio_fifo.write(frame)
     frame = audio_fifo.read(800, False)
@@ -62,16 +62,6 @@ def analyze(frame, start, latencies):
         # get the confidences
         tensor = torch.from_numpy(int2float(frame.to_ndarray()))
         new_confidence = vad_model(tensor, 16000).item()
-        global processed
-        global previous_processed
-        processed = datetime.datetime.now()
-        new_latency = processed - previous_processed
-        print(f"Latency: {new_latency.total_seconds()} seconds")
-        previous_processed = processed
-        end = datetime.datetime.now()
-        latency = end - start
-        #print(f"Latency: {latency.total_seconds()} seconds")
-        latencies.append(latency.total_seconds())
 
         global state
         global cumulative_silence

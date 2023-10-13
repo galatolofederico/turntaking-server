@@ -1,7 +1,7 @@
 import multiprocessing
-from AnalyzerMultiprocessQueue import analyze
+from AudioAnalyzerMultiprocess import analyze
 from InformationSender import send_information
-from serverMultiprocessQueue import main
+from serverMultiprocess import main
 
 if __name__ == "__main__":
     queue = multiprocessing.Queue()
