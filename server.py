@@ -8,9 +8,9 @@ import uuid
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaRelay
-from analyzer import Analyzer
+from src.analyzer import Analyzer
 
-ROOT = os.path.dirname(__file__)
+ROOT = os.path.join(os.path.dirname(__file__), "assets")
 logger = logging.getLogger("pc")
 pcs = set()
 relay_audio = MediaRelay()
