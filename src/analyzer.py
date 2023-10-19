@@ -21,7 +21,7 @@ class State(Enum):
 
 class Analyzer:
     
-    def __init__(self):
+    def __init__(self, *, mqtt_client=None, mqtt_topic=None):
         self.state = State.NOT_STARTED
         self.cumulative_silence = 0.0
         self.resampler = AudioResampler(format='s16', layout='mono', rate=RATE)
@@ -31,7 +31,9 @@ class Analyzer:
                                       model='silero_vad',
                                       force_reload=False,
                                       trust_repo=True)
-    
+        self.mqtt_client = mqtt_client
+        self.mqtt_topic = mqtt_topic
+
     def int2float(self, sound):
         abs_max = np.abs(sound).max()
         sound = sound.astype('float32')
@@ -50,6 +52,11 @@ class Analyzer:
             new_confidence = self.vad_model(tensor, RATE).item()
             self.set_state(new_confidence)
     
+    def signal(self, message):
+        if self.mqtt_client is not None:
+            print(f"Sending message: {message} on topic {self.mqtt_topic}")
+            self.mqtt_client.publish(self.mqtt_topic, message)
+
     def set_state(self, speaking_probability):
         # check if the new frame has voice
             if speaking_probability <= CONFIDENCE_THRESHOLD:
@@ -57,21 +64,22 @@ class Analyzer:
                 if self.state == State.STARTED and self.cumulative_silence >= SILENCE_THRESHOLD:
                     self.state = State.POTENTIAL_TURN_CHANGE
                     print("Potential turn change")
-                    # queue.put("Potential turn change")
+
+                    self.signal("potential_stop_speaking")
 
                 elif self.state == State.POTENTIAL_TURN_CHANGE and self.cumulative_silence >= CONFIRMED_SILENCE_THRESHOLD:
                     self.state = State.NOT_STARTED  # we need to go back to the NOT_STARTED state to initiate a new turn
                     print("Turn change confirmed")
-                    print(" ")
-                    # queue.put("Turn change confirmed")
+
+                    self.signal("stop_speaking")
 
                 # if for more than CONVERSATION_NOT_STARTED_THRESHOLD there is silence
                 # the user may have not understood the response and we should repeat it
                 elif self.state == State.NOT_STARTED and (self.cumulative_silence >= CONVERSATION_NOT_STARTED_THRESHOLD):
                     self.state = State.CONVERSATION_NOT_STARTED
                     print("Conversation not started")
-                    print(" ")
-                    # queue.put("Conversation not started")
+
+                    self.signal("conversation_not_started")
 
                 # if the user stay silent for more than START_CONVERSATION_THRESHOLD
                 # the robot may want to start the conversation
@@ -79,22 +87,24 @@ class Analyzer:
                     self.cumulative_silence = 0
                     self.state = State.NOT_STARTED
                     print("Start conversation")
-                    print(" ")
-                    # queue.put("Start conversation")
+
+                    self.signal("start_conversation")
 
             else:
                 self.cumulative_silence = 0
                 if self.state == State.NOT_STARTED or self.state == State.CONVERSATION_NOT_STARTED:
                     self.state = State.STARTED
                     print("Conversation started")
-                    # queue.put("Conversation started")
+
+                    self.signal("start_speaking")
 
                 elif self.state == State.POTENTIAL_TURN_CHANGE:
                     # if it was detected a potential turn change we need to send a message to
                     # interrupt the pipeline
                     self.state = State.STARTED
                     print("Potential turn change aborted")
-                    # queue.put("Potential turn change aborted")
+
+                    self.signal("potential_stop_speaking_aborted")
 
 
     

@@ -4,3 +4,5 @@ __pycache__/
 *.crt
 *.csr
 *.key
+
+run.sh

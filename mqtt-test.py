@@ -10,6 +10,7 @@ def on_message(client, userdata, msg):
 
 client = mqtt.Client(transport="websockets")
 client.tls_set()
+client.username_pw_set(username="xxx", password="xxxx")
 
 client.on_connect = on_connect
 client.on_message = on_message
